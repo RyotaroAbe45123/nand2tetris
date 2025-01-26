@@ -1,0 +1,63 @@
+// This file is part of www.nand2tetris.org
+// and the book "The Elements of Computing Systems"
+// by Nisan and Schocken, MIT Press.
+// File name: projects/3/a/Register.hdl
+/**
+ * 16-bit register:
+ * If load is asserted, the register's value is set to in;
+ * Otherwise, the register maintains its current value:
+ * if (load(t)) out(t+1) = int(t), else out(t+1) = out(t)
+ */
+CHIP Register {
+    IN in[16], load;
+    OUT out[16];
+
+    PARTS:
+    Mux(a=backward0, b=in[0], sel=load, out=forward0);
+    DFF(in=forward0, out=out[0], out=backward0);
+
+    Mux(a=backward1, b=in[1], sel=load, out=forward1);
+    DFF(in=forward1, out=out[1], out=backward1);
+
+    Mux(a=backward2, b=in[2], sel=load, out=forward2);
+    DFF(in=forward2, out=out[2], out=backward2);
+
+    Mux(a=backward3, b=in[3], sel=load, out=forward3);
+    DFF(in=forward3, out=out[3], out=backward3);
+
+    Mux(a=backward4, b=in[4], sel=load, out=forward4);
+    DFF(in=forward4, out=out[4], out=backward4);
+
+    Mux(a=backward5, b=in[5], sel=load, out=forward5);
+    DFF(in=forward5, out=out[5], out=backward5);
+
+    Mux(a=backward6, b=in[6], sel=load, out=forward6);
+    DFF(in=forward6, out=out[6], out=backward6);
+
+    Mux(a=backward7, b=in[7], sel=load, out=forward7);
+    DFF(in=forward7, out=out[7], out=backward7);
+
+    Mux(a=backward8, b=in[8], sel=load, out=forward8);
+    DFF(in=forward8, out=out[8], out=backward8);
+
+    Mux(a=backward9, b=in[9], sel=load, out=forward9);
+    DFF(in=forward9, out=out[9], out=backward9);
+
+    Mux(a=backward10, b=in[10], sel=load, out=forward10);
+    DFF(in=forward10, out=out[10], out=backward10);
+
+    Mux(a=backward11, b=in[11], sel=load, out=forward11);
+    DFF(in=forward11, out=out[11], out=backward11);
+
+    Mux(a=backward12, b=in[12], sel=load, out=forward12);
+    DFF(in=forward12, out=out[12], out=backward12);
+
+    Mux(a=backward13, b=in[13], sel=load, out=forward13);
+    DFF(in=forward13, out=out[13], out=backward13);
+
+    Mux(a=backward14, b=in[14], sel=load, out=forward14);
+    DFF(in=forward14, out=out[14], out=backward14);
+
+    Mux(a=backward15, b=in[15], sel=load, out=forward15);
+    DFF(in=forward15, out=out[15], out=backward15);
+}
