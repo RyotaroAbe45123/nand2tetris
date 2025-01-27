@@ -14,6 +14,7 @@ CHIP PC {
     OUT out[16];
     
     PARTS:
+    // 参考：https://people.duke.edu/~nts9/logicgates/PC.hdl
     Inc16(in=backward, out=incout);
     Mux16(a=backward, b=incout, sel=inc, out=incforward);
     Mux16(a=incforward, b=in, sel=load, out=loadforward);
