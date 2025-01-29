@@ -19,5 +19,6 @@ CHIP PC {
     Mux16(a=backward, b=incout, sel=inc, out=incforward);
     Mux16(a=incforward, b=in, sel=load, out=loadforward);
     Mux16(a=loadforward, b=false, sel=reset, out=resetforward);
+    // ここはDFF16であればよいのだが、実装がなく面倒なので、Registerを代用する。このときloadには常に1を入力する。
     Register(in=resetforward, load=true, out=out, out=backward);
 }
