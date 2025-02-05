@@ -1,6 +1,5 @@
 from enum import Enum
 import sys
-import re
 
 
 class Instruction(Enum):
@@ -27,7 +26,6 @@ class Parser:
         """
         入力にまだ行があるか判断する
         """
-        print(self.asm)
         return True if self.asm else False
 
     def advance(self) -> None:
@@ -35,7 +33,6 @@ class Parser:
         入力から次の命令を読み込み、それを現在の命令にする
         """
         self.order = self.asm.pop(0)
-        # if self.asm[0].startswith("//") or self.asm[0] == "":
         if self.order.startswith("//") or self.order == "":
             self.order = None
     
@@ -106,47 +103,29 @@ class Code:
         """
         compニーモニックのバイナリーコード(7ビット)を返す
         """
-        # zx、argにDが含まれる場合は、zxは0
-        is_zx = "0" if "D" in arg else "1"
-        # zy、argにAorMが含まれる場合は、zyは0
-        is_zx = "0" if "A" in arg or "M" in arg else "1"
-        if arg == "0":
-            return "101010"
-        elif arg == "1":
-            return "111111"
-        elif arg == "-1":
-            return "111010"
-        elif arg == "D":
-            return "001100"
-        elif arg == "A" or arg == "M":
-            return "110000"
-        elif arg == "!D":
-            return "001101"
-        elif arg == "!A" or arg == "!M":
-            return "110001"
-        elif arg == "-D":
-            return "001111"
-        elif arg == "-A" or arg == "-M":
-            return "110011"
-        elif arg == "D+1":
-            return "011111"
-        elif arg == "A+1" or arg == "M+1":
-            return "110111"
-        elif arg == "D-1":
-            return "001110"
-        elif arg == "A-1" or arg == "M-1":
-            return "110010"
-        elif arg =="D+A" or arg == "D+M":
-            return "000010"
-        elif arg =="D-A" or arg == "D-M":
-            return "010011"
-        elif arg =="A-D" or arg == "M-D":
-            return "000111"
-        elif arg == "D&A" or arg == "D&M":
-            return "000000"
-        elif arg == "D|A" or arg == "D|M":
-            return "010101"
-    
+        unified_arg = arg.replace("M", "A")
+        comp_map = {
+            "0": "101010",
+            "1": "111111",
+            "-1": "111010",
+            "D": "001100",
+            "A": "110000",
+            "!D": "001101",
+            "!A": "110001",
+            "-D": "001111",
+            "-A": "110011",
+            "D+1": "011111",
+            "A+1": "110111",
+            "D-1": "001110",
+            "A-1": "110010",
+            "D+A": "000010",
+            "D-A": "010011",
+            "A-D": "000111",
+            "D&A": "000000",
+            "D|A": "010101",
+        }
+        return comp_map[unified_arg]    
+
     @classmethod
     def jump(self, arg: str) -> str:
         """
@@ -192,7 +171,6 @@ class Hack:
                 dest_asm = parser.dest()
                 comp_asm = parser.comp()
                 jump_asm = parser.jump()
-                print(dest_asm, comp_asm, jump_asm)
                 
                 dest_binary = Code.dest(dest_asm)
                 comp_binary = Code.comp(comp_asm)
