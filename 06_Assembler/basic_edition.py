@@ -145,32 +145,38 @@ class Code:
 
 
 class Hack:
-    @classmethod
-    def convert_asm_to_hack(self, asm_file_name: str) -> None:
-        asm_file_path = f"./{asm_file_name}"
-        parser = Parser(asm_file_path=asm_file_path)
+    def __init__(self, asm_file_name: str) -> None:
+        self.asm_file_path = f"./{asm_file_name}"
+        self.parser = Parser(asm_file_path=self.asm_file_path)
         # 出力ファイルのProg.hackを作成する
-        hack_file_path = f"./{asm_file_name.replace('asm', 'hack')}"
-        with open(hack_file_path, "w") as fp:
+        self.hack_file_path = f"./{asm_file_name.replace('asm', 'hack')}"
+        with open(self.hack_file_path, "w") as fp:
             fp.write("")
+            
+    def do_binary_conversion(self) -> None:
+        """
+        バイナリーコードへ変換
+        """
+        self.convert_asm_to_hack()
 
+    def convert_asm_to_hack(self) -> None:
         # 各行(アセンブリ命令)を反復処理する
         # C命令については、各フィールドをバイナリーコードに変換して、連結する
         # A命令については、xxxをバイナリーコードに変換する
-        while parser.has_more_lines():
-            parser.advance()
-            if parser.order is None:
+        while self.parser.has_more_lines():
+            self.parser.advance()
+            if self.parser.order is None:
                 continue
 
             binary_code = ""
-            if parser.instruction_type() == Instruction.A:
-                symbol_int = int(parser.symbol())
+            if self.parser.instruction_type() == Instruction.A:
+                symbol_int = int(self.parser.symbol())
                 binary_16bit_str = f"{symbol_int:016b}"
                 binary_code += binary_16bit_str
-            elif parser.instruction_type() == Instruction.C:
-                dest_asm = parser.dest()
-                comp_asm = parser.comp()
-                jump_asm = parser.jump()
+            elif self.parser.instruction_type() == Instruction.C:
+                dest_asm = self.parser.dest()
+                comp_asm = self.parser.comp()
+                jump_asm = self.parser.jump()
                 
                 dest_binary = Code.dest(dest_asm)
                 comp_binary = Code.comp(comp_asm)
@@ -185,7 +191,7 @@ class Hack:
             # elif parser.instruction_type() == Instruction.L:
             #     pass
 
-            with open(hack_file_path, "a") as fp:
+            with open(self.hack_file_path, "a") as fp:
                 fp.write(binary_code)
                 fp.write("\n")
 
@@ -198,7 +204,9 @@ def main():
         return
     asm_file_name = args[1]
 
-    Hack.convert_asm_to_hack(asm_file_name=asm_file_name)
+    hack = Hack(asm_file_name=asm_file_name)
+    # asmファイルをhackファイルへ (アセンブリ2バイナリ)
+    hack.do_binary_conversion()
 
 
 if __name__ == "__main__":
