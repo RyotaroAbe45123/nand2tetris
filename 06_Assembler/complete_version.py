@@ -192,8 +192,6 @@ class Hack:
         with open(self.hack_file_path, "w") as fp:
             fp.write("")
 
-        self.val_address = 16
-
     def do_binary_conversion(self) -> None:
         """
         第1パスでシンボルテーブルを作成
@@ -249,7 +247,6 @@ class Hack:
                         address = self.symbol_table.getAddress(symbol=symbol)
                         symbol_int = int(address)
                     else:
-                        # self.val_address += 1
                         self.symbol_table.addEntry(symbol=symbol, address=val_number)
                         symbol_int = int(val_number)
                         val_number += 1
