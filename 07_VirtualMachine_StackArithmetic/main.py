@@ -1,4 +1,5 @@
 from enum import Enum
+import os
 import sys
 
 
@@ -70,6 +71,7 @@ class Parser:
 
 class CodeWriter:
     def __init__(self, file_path: str) -> None:
+        self.file_name = os.path.basename(file_path).split(".")[0]
         # 出力ファイルのProg.hackを作成する
         self.asm_file_path = f"{file_path.replace('vm', 'asm')}"
         self.fp = open(self.asm_file_path, "w")
@@ -95,10 +97,6 @@ class CodeWriter:
                 "symbol": "THAT",
                 "base": 3010
             },
-            "temp": {
-                "symbol": "TEMP",
-                "base": 5
-            }
         }
         for k,v in self.pointer_map.items():
             self._set_base_to_pointer(
@@ -269,16 +267,19 @@ class CodeWriter:
             self.fp.write("  D=M\n")
             self.fp.write(f"  @{index}\n")
             self.fp.write("  D=D+A\n")
-            self.fp.write("  @TEMP\n")
+            # 5をAレジスタへ、一時的な保存
+            self.fp.write("  @5\n")
             self.fp.write("  M=D\n")
             if command == Command.PUSH:
-                self.fp.write("  @TEMP\n")
+                # 5をAレジスタへ、一時的な保存
+                self.fp.write("  @5\n")
                 self.fp.write("  A=M\n")
                 self.fp.write("  D=M\n")
                 self._store_one_data_in_stack()
             elif command == Command.POP:
                 self._get_one_arg_from_stack()
-                self.fp.write("  @TEMP\n")
+                # 5をAレジスタへ、一時的な保存
+                self.fp.write("  @5\n")
                 self.fp.write("  A=M\n")
                 self.fp.write("  M=D\n")
         elif segment == "pointer":
@@ -290,6 +291,15 @@ class CodeWriter:
             elif command == Command.POP:
                 self._get_one_arg_from_stack()
                 self.fp.write(f"  @{seg}\n")
+                self.fp.write("  M=D\n")
+        elif segment == "static":
+            if command == Command.PUSH:
+                self.fp.write(f"  @{self.file_name}.{index}\n")
+                self.fp.write("  D=M\n")
+                self._store_one_data_in_stack()
+            elif command == Command.POP:
+                self._get_one_arg_from_stack()
+                self.fp.write(f"  @{self.file_name}.{index}\n")
                 self.fp.write("  M=D\n")
     
     def close(self) -> None:
