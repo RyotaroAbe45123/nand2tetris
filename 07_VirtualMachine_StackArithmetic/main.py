@@ -253,7 +253,7 @@ class CodeWriter:
             self.fp.write(f"  @{index}\n")
             self.fp.write("  D=A\n")
             self._store_one_data_in_stack()
-        elif segment in ("local", "argument", "this", "that", "temp"):
+        elif segment in ("local", "argument", "temp"):
             if command == Command.PUSH:
                 self._get_data_from_segment(
                     segment_base=self.pointer_map[segment]["base"], index=index
@@ -264,6 +264,33 @@ class CodeWriter:
                 self._store_data_in_segment(
                     segment_base=self.pointer_map[segment]["base"], index=index                    
                 )
+        elif segment in ("this", "that"):
+            self.fp.write(f"  @{self.pointer_map[segment]['symbol']}\n")
+            self.fp.write("  D=M\n")
+            self.fp.write(f"  @{index}\n")
+            self.fp.write("  D=D+A\n")
+            self.fp.write("  @TEMP\n")
+            self.fp.write("  M=D\n")
+            if command == Command.PUSH:
+                self.fp.write("  @TEMP\n")
+                self.fp.write("  A=M\n")
+                self.fp.write("  D=M\n")
+                self._store_one_data_in_stack()
+            elif command == Command.POP:
+                self._get_one_arg_from_stack()
+                self.fp.write("  @TEMP\n")
+                self.fp.write("  A=M\n")
+                self.fp.write("  M=D\n")
+        elif segment == "pointer":
+            seg = "THIS" if index == 0 else "THAT"
+            if command == Command.PUSH:
+                self.fp.write(f"  @{seg}\n")
+                self.fp.write("  D=M\n")
+                self._store_one_data_in_stack()
+            elif command == Command.POP:
+                self._get_one_arg_from_stack()
+                self.fp.write(f"  @{seg}\n")
+                self.fp.write("  M=D\n")
     
     def close(self) -> None:
         """
