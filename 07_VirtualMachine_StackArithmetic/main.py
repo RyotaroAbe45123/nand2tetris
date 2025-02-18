@@ -73,48 +73,121 @@ class CodeWriter:
         # 出力ファイルのProg.hackを作成する
         self.asm_file_path = f"{file_path.replace('vm', 'asm')}"
         self.fp = open(self.asm_file_path, "w")
-        
-        self._set_stack_base_to_stack_pointer(stack_base=256)
-        
-        self.segment_number = 0
 
-    def _set_stack_base_to_stack_pointer(self, stack_base: int) -> None:
-        self.fp.write("  // initialize stack pointer\n")
-        self.fp.write(f"  @{stack_base}\n")
+        self.pointer_map = {
+            "stack": {
+                "symbol": "SP",
+                "base": 256
+            },
+            "local": {
+                "symbol": "LCL",
+                "base": 300
+            },
+            "argument": {
+                "symbol": "ARG",
+                "base": 400
+            },
+            "this": {
+                "symbol": "THIS",
+                "base": 3000
+            },
+            "that": {
+                "symbol": "THAT",
+                "base": 3010
+            },
+            "temp": {
+                "symbol": "TEMP",
+                "base": 5
+            }
+        }
+        for k,v in self.pointer_map.items():
+            self._set_base_to_pointer(
+                pointer=k, base=v["base"]
+            )
+        
+        self.jump_number = 0
+
+    def _set_base_to_pointer(self, pointer: str, base: int) -> None:
+        """
+        各セグメントおよびスタックのポインタのアドレスを設定
+        Parameters
+        ----------
+        pointer : str
+            ポインタの種類 (local, argument, this, that, stack)
+        base : int
+            ベースアドレス
+        """
+        self.fp.write(f"  // initialize {pointer} pointer\n")
+        self.fp.write(f"  @{base}\n")
         self.fp.write("  D=A\n")
-        self.fp.write("  @SP\n")
+        self.fp.write(f"  @{self.pointer_map[pointer]['symbol']}\n")
         self.fp.write("  M=D\n")
-    
+
     def _create_infinite_loop(self) -> None:
         self.fp.write("(END)\n")
         self.fp.write("  @END\n")
         self.fp.write("  0;JMP\n")
 
     def _store_data_in_stack(self) -> None:
+        """
+        スタックへデータを格納するヘルパー関数
+        """
         self.fp.write("  @SP\n")
         self.fp.write("  A=M\n")
         self.fp.write("  M=D\n")
     
     def _get_data_from_stack(self) -> None:
+        """
+        スタックからデータを取得するヘルパー関数
+        """
         self.fp.write("  @SP\n")
         self.fp.write("  A=M\n")
         self.fp.write("  D=M\n")
 
     def _increase_stack_pointer(self) -> None:
+        """
+        スタックポインタを1増やすヘルパー関数
+        """
         self.fp.write("  @SP\n")
         self.fp.write("  M=M+1\n")
 
     def _decrease_stack_pointer(self) -> None:
+        """
+        スタックポインタを1減らすヘルパー関数
+        """
         self.fp.write("  @SP\n")
         self.fp.write("  M=M-1\n")
         
+    def _store_one_data_in_stack(self) -> None:
+        """
+        スタックへ一つデータを格納するヘルパー関数 (スタックポインタは考慮不要)
+        """
+        self._store_data_in_stack()
+        self._increase_stack_pointer()
+        
+    def _get_one_arg_from_stack(self) -> None:
+        """
+        スタックから一つデータを取得するヘルパー関数 (スタックポインタは考慮不要)
+        """
+        self._decrease_stack_pointer()
+        self._get_data_from_stack()
+
     def _get_two_args_from_stack(self) -> None:
+        """
+        スタックへ一つデータを格納するヘルパー関数 (スタックポインタは考慮不要)
+        """
+        self._get_one_arg_from_stack()
         self.fp.write("  @SP\n")
         self.fp.write("  AM=M-1\n")
+
+    def _store_data_in_segment(self, segment_base: int, index: int) -> None:
+        self.fp.write(f"  @{segment_base+index}\n")
+        self.fp.write("  M=D\n")
+
+    def _get_data_from_segment(self, segment_base: int, index: int) -> None:
+        self.fp.write(f"  @{segment_base+index}\n")
         self.fp.write("  D=M\n")
-        self.fp.write("  @SP\n")
-        self.fp.write("  AM=M-1\n")
-    
+
     def write_arithmetic(self, command: str) -> None:
         """
         算術論理コマンドに対応するアセンブリコードを書く
@@ -122,23 +195,20 @@ class CodeWriter:
         if command == "add":
             self._get_two_args_from_stack()
             self.fp.write("  M=D+M\n")
-            self.fp.write("  @SP\n")
-            self.fp.write("  M=M+1\n")
+            self._increase_stack_pointer()
         elif command == "sub":
             self._get_two_args_from_stack()
             self.fp.write("  M=M-D\n")
-            self.fp.write("  @SP\n")
-            self.fp.write("  M=M+1\n")
+            self._increase_stack_pointer()
         elif command == "neg":
             self.fp.write("  @SP\n")
             self.fp.write("  AM=M-1\n")
             self.fp.write("  M=-M\n")
-            self.fp.write("  @SP\n")
-            self.fp.write("  M=M+1\n")
+            self._increase_stack_pointer()
         elif command in ("eq", "gt", "lt"):
             self._get_two_args_from_stack()
             self.fp.write("  D=M-D\n")
-            self.fp.write(f"  @true_{self.segment_number}\n")
+            self.fp.write(f"  @true_{self.jump_number}\n")
             jump = ""
             if command == "eq":
                 jump = "JEQ"
@@ -150,32 +220,28 @@ class CodeWriter:
             self.fp.write("  @SP\n")
             self.fp.write("  A=M\n")
             self.fp.write("  M=0\n")
-            self.fp.write(f"  @end_{self.segment_number}\n")
+            self.fp.write(f"  @end_{self.jump_number}\n")
             self.fp.write("  0;JMP\n")
-            self.fp.write(f"(true_{self.segment_number})\n")
+            self.fp.write(f"(true_{self.jump_number})\n")
             self.fp.write("  @SP\n")
             self.fp.write("  A=M\n")
             self.fp.write("  M=-1\n")
-            self.fp.write(f"(end_{self.segment_number})\n")
-            self.fp.write("  @SP\n")
-            self.fp.write("  M=M+1\n")
-            self.segment_number += 1
+            self.fp.write(f"(end_{self.jump_number})\n")
+            self._increase_stack_pointer()
+            self.jump_number += 1
         elif command == "and":
             self._get_two_args_from_stack()
             self.fp.write("  M=D&M\n")
-            self.fp.write("  @SP\n")
-            self.fp.write("  M=M+1\n")
+            self._increase_stack_pointer()
         elif command == "or":
             self._get_two_args_from_stack()
             self.fp.write("  M=D|M\n")
-            self.fp.write("  @SP\n")
-            self.fp.write("  M=M+1\n")
+            self._increase_stack_pointer()
         elif command == "not":
             self.fp.write("  @SP\n")
             self.fp.write("  AM=M-1\n")
             self.fp.write("  M=!M\n")
-            self.fp.write("  @SP\n")
-            self.fp.write("  M=M+1\n")            
+            self._increase_stack_pointer()
         else:
             print("Invalid Command")
 
@@ -186,12 +252,18 @@ class CodeWriter:
         if segment == "constant":
             self.fp.write(f"  @{index}\n")
             self.fp.write("  D=A\n")
-        if command == Command.PUSH:
-            self._store_data_in_stack()
-            self._increase_stack_pointer()
-        elif command == Command.POP:
-            self._decrease_stack_pointer()
-            self._get_data_from_stack()
+            self._store_one_data_in_stack()
+        elif segment in ("local", "argument", "this", "that", "temp"):
+            if command == Command.PUSH:
+                self._get_data_from_segment(
+                    segment_base=self.pointer_map[segment]["base"], index=index
+                )
+                self._store_one_data_in_stack()
+            elif command == Command.POP:
+                self._get_one_arg_from_stack()
+                self._store_data_in_segment(
+                    segment_base=self.pointer_map[segment]["base"], index=index                    
+                )
     
     def close(self) -> None:
         """
