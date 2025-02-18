@@ -72,68 +72,120 @@ class CodeWriter:
     def __init__(self, file_path: str) -> None:
         # 出力ファイルのProg.hackを作成する
         self.asm_file_path = f"{file_path.replace('vm', 'asm')}"
-        with open(self.asm_file_path, "w") as fp:
-            fp.write("")
+        self.fp = open(self.asm_file_path, "w")
         
         self._set_stack_base_to_stack_pointer(stack_base=256)
+        
+        self.segment_number = 0
 
     def _set_stack_base_to_stack_pointer(self, stack_base: int) -> None:
-        with open(self.asm_file_path, "a") as fp:
-            fp.write("// initialize stack pointer\n")
-            fp.write(f"@{stack_base}\n")
-            fp.write("D=A\n")
-            fp.write("@SP\n")
-            fp.write("M=D\n")
+        self.fp.write("  // initialize stack pointer\n")
+        self.fp.write(f"  @{stack_base}\n")
+        self.fp.write("  D=A\n")
+        self.fp.write("  @SP\n")
+        self.fp.write("  M=D\n")
     
     def _create_infinite_loop(self) -> None:
-        with open(self.asm_file_path, "a") as fp:
-            fp.write("(END)\n")
-            fp.write("  @END\n")
-            fp.write("  0;JMP\n")
+        self.fp.write("(END)\n")
+        self.fp.write("  @END\n")
+        self.fp.write("  0;JMP\n")
 
     def _store_data_in_stack(self) -> None:
-        with open(self.asm_file_path, "a") as fp:
-            fp.write("@SP\n")
-            fp.write("A=M\n")
-            fp.write("M=D\n")
+        self.fp.write("  @SP\n")
+        self.fp.write("  A=M\n")
+        self.fp.write("  M=D\n")
     
     def _get_data_from_stack(self) -> None:
-        with open(self.asm_file_path, "a") as fp:
-            fp.write("@SP\n")
-            fp.write("A=M\n")
-            fp.write("D=M\n")
-    
+        self.fp.write("  @SP\n")
+        self.fp.write("  A=M\n")
+        self.fp.write("  D=M\n")
+
     def _increase_stack_pointer(self) -> None:
-        with open(self.asm_file_path, "a") as fp:
-            fp.write("@SP\n")
-            fp.write("M=M+1\n")
-    
+        self.fp.write("  @SP\n")
+        self.fp.write("  M=M+1\n")
+
     def _decrease_stack_pointer(self) -> None:
-        with open(self.asm_file_path, "a") as fp:
-            fp.write("@SP\n")
-            fp.write("M=M-1\n")
+        self.fp.write("  @SP\n")
+        self.fp.write("  M=M-1\n")
+        
+    def _get_two_args_from_stack(self) -> None:
+        self.fp.write("  @SP\n")
+        self.fp.write("  AM=M-1\n")
+        self.fp.write("  D=M\n")
+        self.fp.write("  @SP\n")
+        self.fp.write("  AM=M-1\n")
     
     def write_arithmetic(self, command: str) -> None:
         """
         算術論理コマンドに対応するアセンブリコードを書く
         """
         if command == "add":
-            with open(self.asm_file_path, "a") as fp:
-                fp.write("@SP\n")
-                fp.write("AM=M-1\n")
-                fp.write("D=M\n")
-                fp.write("@SP\n")
-                fp.write("A=M-1\n")
-                fp.write("M=D+M\n")
-    
+            self._get_two_args_from_stack()
+            self.fp.write("  M=D+M\n")
+            self.fp.write("  @SP\n")
+            self.fp.write("  M=M+1\n")
+        elif command == "sub":
+            self._get_two_args_from_stack()
+            self.fp.write("  M=M-D\n")
+            self.fp.write("  @SP\n")
+            self.fp.write("  M=M+1\n")
+        elif command == "neg":
+            self.fp.write("  @SP\n")
+            self.fp.write("  AM=M-1\n")
+            self.fp.write("  M=-M\n")
+            self.fp.write("  @SP\n")
+            self.fp.write("  M=M+1\n")
+        elif command in ("eq", "gt", "lt"):
+            self._get_two_args_from_stack()
+            self.fp.write("  D=M-D\n")
+            self.fp.write(f"  @true_{self.segment_number}\n")
+            jump = ""
+            if command == "eq":
+                jump = "JEQ"
+            elif command == "gt":
+                jump = "JGT"
+            elif command == "lt":
+                jump = "JLT"
+            self.fp.write(f"  D;{jump}\n")
+            self.fp.write("  @SP\n")
+            self.fp.write("  A=M\n")
+            self.fp.write("  M=0\n")
+            self.fp.write(f"  @end_{self.segment_number}\n")
+            self.fp.write("  0;JMP\n")
+            self.fp.write(f"(true_{self.segment_number})\n")
+            self.fp.write("  @SP\n")
+            self.fp.write("  A=M\n")
+            self.fp.write("  M=-1\n")
+            self.fp.write(f"(end_{self.segment_number})\n")
+            self.fp.write("  @SP\n")
+            self.fp.write("  M=M+1\n")
+            self.segment_number += 1
+        elif command == "and":
+            self._get_two_args_from_stack()
+            self.fp.write("  M=D&M\n")
+            self.fp.write("  @SP\n")
+            self.fp.write("  M=M+1\n")
+        elif command == "or":
+            self._get_two_args_from_stack()
+            self.fp.write("  M=D|M\n")
+            self.fp.write("  @SP\n")
+            self.fp.write("  M=M+1\n")
+        elif command == "not":
+            self.fp.write("  @SP\n")
+            self.fp.write("  AM=M-1\n")
+            self.fp.write("  M=!M\n")
+            self.fp.write("  @SP\n")
+            self.fp.write("  M=M+1\n")            
+        else:
+            print("Invalid Command")
+
     def write_push_pop(self, command: Command, segment: str, index: int) -> None:
         """
         PUSH, POPコマンドに対応するアセンブリコードを書く
         """
         if segment == "constant":
-            with open(self.asm_file_path, "a") as fp:
-                fp.write(f"@{index}\n")
-                fp.write("D=A\n")
+            self.fp.write(f"  @{index}\n")
+            self.fp.write("  D=A\n")
         if command == Command.PUSH:
             self._store_data_in_stack()
             self._increase_stack_pointer()
@@ -146,6 +198,7 @@ class CodeWriter:
         出力ファイル/ストリームを閉じる
         """
         self._create_infinite_loop()
+        self.fp.close()
 
 
 class VMTranslator:
@@ -160,8 +213,7 @@ class VMTranslator:
             if self.parser.order is None:
                 continue
 
-            with open(self.code_writer.asm_file_path, "a") as fp:
-                fp.write(f"// {self.parser.order}\n")
+            self.code_writer.fp.write(f"  // {self.parser.order}\n")
             if self.parser.commnad_type() == Command.ARITHMETIC:
                 self.code_writer.write_arithmetic(command=self.parser.order)
             elif self.parser.commnad_type() == Command.PUSH or self.parser.commnad_type() == Command.POP:
@@ -172,6 +224,7 @@ class VMTranslator:
                 )
             else:
                 print(self.parser.order, self.parser.commnad_type())
+        self.code_writer.close()
             
 def main():
     # コマンドライン引数で入力ファイルの名前を受け取る
