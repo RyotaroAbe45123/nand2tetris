@@ -35,8 +35,12 @@ class Parser:
     def advance(self) -> None:
         """
         入力から次の命令を読み込み、それを現在の命令にする
+        コマンドと同行にあるコメントも削除する
         """
         self.order = self.asm.pop(0)
+        comment_index = self.order.find("//")
+        if comment_index != -1:
+            self.order = self.order[:comment_index]
         self.order = self.order.strip()
         if self.order.startswith("//") or self.order == "":
             self.order = None
@@ -46,9 +50,6 @@ class Parser:
         現在のコマンドの種類を返す
         """
         command_list = self.order.split()
-        if "//" in command_list:
-            comment_index = command_list.index("//")
-            command_list = command_list[:comment_index]
         command_length = len(command_list)
         if command_length == 1:
             return Command.ARITHMETIC
@@ -268,7 +269,6 @@ class CodeWriter:
             self.fp.write("  M=!M\n")
             self._increase_stack_pointer()
         else:
-            print(command)
             raise Exception(f"Invalid Command: {command}")
 
     def write_push_pop(self, command: Command, segment: str, index: int) -> None:
@@ -334,7 +334,8 @@ class CodeWriter:
         self.fp.write(f"({label})\n")
     
     def write_goto(self, label: str) -> None:
-        pass
+        self.fp.write(f"  @{label}\n")
+        self.fp.write("  0;JMP\n")
     
     def write_if(self, label: str) -> None:
         self._get_one_arg_from_stack()
