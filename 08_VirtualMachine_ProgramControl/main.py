@@ -15,6 +15,15 @@ class Command(Enum):
     CALL = "C_CALL"
 
 
+SEGMENT_MAP = {
+    "stack": "SP",
+    "local": "LCL",
+    "argument": "ARG",
+    "this": "THIS",
+    "that": "THAT"
+}
+
+
 class Parser:
     def __init__(self, vm_file_path: str) -> None:
         """
@@ -52,7 +61,10 @@ class Parser:
         command_list = self.order.split()
         command_length = len(command_list)
         if command_length == 1:
-            return Command.ARITHMETIC
+            if "return" in command_list:
+                return Command.RETURN
+            else:
+                return Command.ARITHMETIC
         elif command_length == 2:
             if "label" in command_list:
                 return Command.LABEL
@@ -67,6 +79,8 @@ class Parser:
                 return Command.PUSH
             elif "pop" in command_list:
                 return Command.POP
+            elif "function" in command_list:
+                return Command.FUNCTION
             else:
                 raise Exception(f"Invalid Command Type: {self.order}")
         else:
@@ -94,33 +108,6 @@ class CodeWriter:
         self.asm_file_path = f"{file_path.replace('vm', 'asm')}"
         self.fp = open(self.asm_file_path, "w")
 
-        self.pointer_map = {
-            "stack": {
-                "symbol": "SP",
-                "base": 256
-            },
-            "local": {
-                "symbol": "LCL",
-                "base": 300
-            },
-            "argument": {
-                "symbol": "ARG",
-                "base": 400
-            },
-            "this": {
-                "symbol": "THIS",
-                "base": 3000
-            },
-            "that": {
-                "symbol": "THAT",
-                "base": 3010
-            },
-        }
-        for k,v in self.pointer_map.items():
-            self._set_base_to_pointer(
-                pointer=k, base=v["base"]
-            )
-        
         self.jump_number = 0
         
     def set_file_name(file_name: str) -> None:
@@ -133,22 +120,6 @@ class CodeWriter:
         """
         pass
     
-    def _set_base_to_pointer(self, pointer: str, base: int) -> None:
-        """
-        各セグメントおよびスタックのポインタのアドレスを設定
-        Parameters
-        ----------
-        pointer : str
-            ポインタの種類 (local, argument, this, that, stack)
-        base : int
-            ベースアドレス
-        """
-        self.fp.write(f"  // initialize {pointer} pointer\n")
-        self.fp.write(f"  @{base}\n")
-        self.fp.write("  D=A\n")
-        self.fp.write(f"  @{self.pointer_map[pointer]['symbol']}\n")
-        self.fp.write("  M=D\n")
-
     def _create_infinite_loop(self) -> None:
         self.fp.write("(END)\n")
         self.fp.write("  @END\n")
@@ -206,12 +177,61 @@ class CodeWriter:
         self.fp.write("  @SP\n")
         self.fp.write("  AM=M-1\n")
 
-    def _store_data_in_segment(self, segment_base: int, index: int) -> None:
-        self.fp.write(f"  @{segment_base+index}\n")
+    def _calculate_segment_address(self, segment: str, index: int) -> None:
+        """
+        セグメントのアドレスを計算する関数
+        
+        Parameters
+        ----------
+        segment : str
+            LCL, ARG, THIS, THATの4種類
+        index : int
+            インデックス
+        """
+        # セグメントのベースアドレスを取得
+        self.fp.write(f"  @{segment}\n")
+        self.fp.write("  D=M\n")
+        # idx分ずらす
+        self.fp.write(f"  @{index}\n")
+        self.fp.write("  D=D+A\n")
+        # 一時的にTEMPへsegment+idxを保存
+        self.fp.write("  @5\n")
         self.fp.write("  M=D\n")
+        
+    def _store_data_in_segment(self, segment: str, index: int, data: int = None) -> None:
+        """
+        セグメントからデータを取得し、データレジスタへ格納する関数
+        インデックスにも対応
 
-    def _get_data_from_segment(self, segment_base: int, index: int) -> None:
-        self.fp.write(f"  @{segment_base+index}\n")
+        Parameters
+        ----------
+        segment : str
+            LCL, ARG, THIS, THATの4種類
+        index : int
+            インデックス
+        data : int
+            格納するデータ
+            指定されない場合(=None)はデータレジスタの値を格納する
+        """
+        self._calculate_segment_address(
+            segment=segment, index=index
+        )
+        # データを格納
+        # データの指定がある場合、直前でデータレジスタにその値を格納する
+        if data is not None:
+            self.fp.write(f"  @{data}\n")
+            self.fp.write("  D=A\n")
+        self.fp.write("  @5\n")
+        self.fp.write("  A=M\n")
+        self.fp.write("  M=D\n")
+        self._increase_stack_pointer()
+        
+    def _get_data_from_segment(self, segment: str, index: int) -> None:
+        self._calculate_segment_address(
+            segment=segment, index=index
+        )
+        self.fp.write("  @5\n")
+        self.fp.write("  A=M\n")
         self.fp.write("  D=M\n")
 
     def write_arithmetic(self, command: str) -> None:
@@ -279,37 +299,44 @@ class CodeWriter:
             self.fp.write(f"  @{index}\n")
             self.fp.write("  D=A\n")
             self._store_one_data_in_stack()
-        elif segment in ("local", "argument", "temp"):
+        elif segment in ("local", "argument", "this", "that", "temp"):
             if command == Command.PUSH:
                 self._get_data_from_segment(
-                    segment_base=self.pointer_map[segment]["base"], index=index
+                    # segment_base=self.pointer_map[segment]["base"],
+                    segment=SEGMENT_MAP[segment],
+                    index=index
                 )
                 self._store_one_data_in_stack()
             elif command == Command.POP:
                 self._get_one_arg_from_stack()
+                # self._store_data_in_segment(
+                #     segment_base=self.pointer_map[segment]["base"], index=index                    
+                # )
                 self._store_data_in_segment(
-                    segment_base=self.pointer_map[segment]["base"], index=index                    
+                    segment=SEGMENT_MAP[segment],
+                    index=index
                 )
-        elif segment in ("this", "that"):
-            self.fp.write(f"  @{self.pointer_map[segment]['symbol']}\n")
-            self.fp.write("  D=M\n")
-            self.fp.write(f"  @{index}\n")
-            self.fp.write("  D=D+A\n")
+        # elif segment in ("this", "that"):
+            # self.fp.write(f"  @{SEGMENT_MAP[segment]}\n")
+            # self.fp.write(f"  @{self.pointer_map[segment]['symbol']}\n")
+            # self.fp.write("  D=M\n")
+            # self.fp.write(f"  @{index}\n")
+            # self.fp.write("  D=D+A\n")
             # 5をAレジスタへ、一時的な保存
-            self.fp.write("  @5\n")
-            self.fp.write("  M=D\n")
-            if command == Command.PUSH:
+            # self.fp.write("  @5\n")
+            # self.fp.write("  M=D\n")
+            # if command == Command.PUSH:
                 # 5をAレジスタへ、一時的な保存
-                self.fp.write("  @5\n")
-                self.fp.write("  A=M\n")
-                self.fp.write("  D=M\n")
-                self._store_one_data_in_stack()
-            elif command == Command.POP:
-                self._get_one_arg_from_stack()
+                # self.fp.write("  @5\n")
+                # self.fp.write("  A=M\n")
+                # self.fp.write("  D=M\n")
+                # self._store_one_data_in_stack()
+            # elif command == Command.POP:
+                # self._get_one_arg_from_stack()
                 # 5をAレジスタへ、一時的な保存
-                self.fp.write("  @5\n")
-                self.fp.write("  A=M\n")
-                self.fp.write("  M=D\n")
+                # self.fp.write("  @5\n")
+                # self.fp.write("  A=M\n")
+                # self.fp.write("  M=D\n")
         elif segment == "pointer":
             seg = "THIS" if index == 0 else "THAT"
             if command == Command.PUSH:
@@ -342,14 +369,107 @@ class CodeWriter:
         self.fp.write(f"  @{label}\n")
         self.fp.write("  D;JGT\n")
     
-    def write_function(self, function_name: str) -> None:
+    def write_function(self, function_name: str, n_vars: int) -> None:
+        """
+        関数fを宣言し、関数がn_vars個のローカル変数を持つことを知らせる
+
+        Parameters
+        ----------
+        function_name : str
+            関数名
+        n_vars : int
+            ローカル変数の数
+            この数だけスタックを0で初期化する
+        """
+        for i in range(n_vars):
+            self._store_data_in_segment(
+                segment=SEGMENT_MAP["local"],
+                index=i,
+                data=0
+            )
+    
+    def write_call(self, function_name: str, n_args: int) -> None:
+        """_summary_
+
+        Parameters
+        ----------
+        function_name : str
+            _description_
+        n_args : int
+            _description_
+        """
         pass
     
-    def write_call(self, function_name: str, n_vars: int) -> None:
-        pass
-    
-    def write_return(self, function_name: str, n_args: int) -> None:
-        pass
+    def write_return(self, function_name: str) -> None:
+        """
+        現在の関数を終了し、呼び出し側に制御を返す
+
+        Parameters
+        ----------
+        function_name : str
+            関数名
+        """
+        # fname = LCL
+        self.fp.write("  @LCL\n")
+        self.fp.write("  D=M\n")
+        # self.fp.write("  D=M\n")
+        self.fp.write("  @13\n")
+        self.fp.write("  M=D\n")
+        # retAddr = *(fname-5)
+        self.fp.write("  @LCL\n")
+        self.fp.write("  D=M\n")
+        self.fp.write("  @5\n")
+        self.fp.write("  D=D-A\n")
+        self.fp.write("  A=D\n")
+        self.fp.write("  D=M\n")
+        self.fp.write("  @14\n")
+        self.fp.write("  M=D\n")
+        # *ARG = pop()
+        self._get_one_arg_from_stack()
+        self.fp.write("  @ARG\n")
+        self.fp.write("  A=M\n")
+        self.fp.write("  M=D\n")
+        # SP = ARG + 1
+        self.fp.write("  @ARG\n")
+        self.fp.write("  D=M+1\n")
+        self.fp.write("  @SP\n")
+        self.fp.write("  M=D\n")
+        # THAT = *(fname-1)
+        self.fp.write("  @13\n")
+        self.fp.write("  D=M\n")
+        self.fp.write("  @1\n")
+        self.fp.write("  A=D-A\n")
+        self.fp.write("  D=M\n")
+        self.fp.write("  @THAT\n")
+        self.fp.write("  M=D\n")
+        # THIS = *(fname-2)
+        self.fp.write("  @13\n")
+        self.fp.write("  D=M\n")
+        self.fp.write("  @2\n")
+        self.fp.write("  A=D-A\n")
+        self.fp.write("  D=M\n")
+        self.fp.write("  @THIS\n")
+        self.fp.write("  M=D\n")
+        # ARG = *(fname-3)
+        self.fp.write("  @13\n")
+        self.fp.write("  D=M\n")
+        self.fp.write("  @3\n")
+        self.fp.write("  A=D-A\n")
+        self.fp.write("  D=M\n")
+        self.fp.write("  @ARG\n")
+        self.fp.write("  M=D\n")
+        # LCL = *(fname-4)
+        self.fp.write("  @13\n")
+        self.fp.write("  D=M\n")
+        self.fp.write("  @4\n")
+        self.fp.write("  A=D-A\n")
+        self.fp.write("  D=M\n")
+        self.fp.write("  @LCL\n")
+        self.fp.write("  M=D\n")
+        # goto retAddr
+        self.fp.write("  @14\n")
+        self.fp.write("  A=M\n")
+        self.fp.write("  0;JMP\n")
 
     def close(self) -> None:
         """
@@ -387,6 +507,21 @@ class VMTranslator:
                 self.code_writer.write_goto(label=self.parser.order.split()[-1])
             elif command_type == Command.IF:
                 self.code_writer.write_if(label=self.parser.order.split()[-1])
+            elif command_type == Command.FUNCTION:
+                self.function_name = self.parser.arg1()
+                self.n_args = self.parser.arg2()
+                self.n_vars = self.parser.arg2()
+                self.code_writer.write_function(
+                    function_name=self.function_name,
+                    n_vars=self.parser.arg2()
+                )
+            elif command_type == Command.RETURN:
+                self.code_writer.write_return(function_name=self.function_name)
+            elif command_type == Command.CALL:
+                self.code_writer.write_call(
+                    function_name=self.function_name,
+                    n_vars=self.n_vars
+                )
             else:
                 print(self.parser.order, command_type)
         self.code_writer.close()
